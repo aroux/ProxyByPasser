@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
+
+	<bean id="property.configurer" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+	<property name="location">
+		<value>classpath:properties/server.properties</value>
+	</property>
+	</bean>
+
+  <bean id="secure.http.server" class="com.proxy.bypasser.http.SecureHttpServer">
+  	<property name="pm" ref="privacy.maker" />
+  	<constructor-arg value="${secure.http.server.port}" />
+  </bean>
+  
+  <bean id="privacy.maker" class="com.proxy.bypasser.crypt.PrivacyMaker">
+  	<property name="algorithm" value="${privacy.maker.algorithm}" />
+  	<property name="keySize" value="${privacy.maker.key.size}" />
+  	<property name="keyFileName" value="${privacy.maker.key.filename}" />
+  	<property name="dataPath" value="${privacy.maker.data.path}" />
+  </bean>
+
+</beans>
