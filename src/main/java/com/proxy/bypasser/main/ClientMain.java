@@ -4,6 +4,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
@@ -16,6 +17,8 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 import com.proxy.bypasser.crypt.PrivacyMaker;
 import com.proxy.bypasser.http.SecureHttpClient;
 import com.proxy.bypasser.http.SecureHttpServer;
+import com.proxy.bypasser.services.ServiceInfo;
+import com.proxy.bypasser.services.ServicesManager;
 
 public class ClientMain {
 
@@ -30,16 +33,25 @@ public class ClientMain {
 	 * @throws IllegalBlockSizeException 
 	 * @throws BadPaddingException 
 	 * @throws InvalidKeyException 
+	 * @throws CloneNotSupportedException 
 	 */
-	public static void main(String[] args) throws NoSuchAlgorithmException, NoSuchPaddingException, FileNotFoundException, IOException, ClassNotFoundException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException, HttpException {
+	public static void main(String[] args) throws NoSuchAlgorithmException, NoSuchPaddingException, FileNotFoundException, IOException, ClassNotFoundException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException, HttpException, CloneNotSupportedException {
 		ApplicationContext context =
 		    new ClassPathXmlApplicationContext("contexts/applicationContext-client.xml");
 		
 		// Init privacy maker
 		PrivacyMaker pm = context.getBean("privacy.maker", PrivacyMaker.class);
 		pm.init();
+		
+		// Run clients for all services
 		SecureHttpClient client = context.getBean("secure.http.client", SecureHttpClient.class);
-		client.run();
+		ServicesManager servicesManager = context.getBean("services.manager", ServicesManager.class);
+		List<ServiceInfo> services = servicesManager.getServices();
+		for (ServiceInfo serviceInfo : services) {
+			SecureHttpClient clientClone = (SecureHttpClient) client.clone();
+			clientClone.setServiceInfo(serviceInfo);
+			new Thread(clientClone).start();
+		}
 	}
 
 }

@@ -10,6 +10,7 @@ import java.net.Socket;
 import org.apache.log4j.Logger;
 
 import com.proxy.bypasser.data.BytesArray;
+import com.proxy.bypasser.http.SecureHttpClient;
 import com.proxy.bypasser.io.exc.FatalIOException;
 import com.proxy.bypasser.utils.IOUtils;
 
@@ -17,24 +18,32 @@ public class TcpForwarder {
 	
 	Logger logger = Logger.getLogger(TcpForwarder.class);
 	
-	private Integer socketServerPort = 5555;
+	private Integer port;
 	
 	private Socket socket;
 	private ServerSocket serverSocket = null;
+	
+	private SecureHttpClient client;
 	
 	private InputStream is;
 	
 	private OutputStream os;
 	
 	public TcpForwarder() {
+		this.port = null;
+		this.client = null;
 	}
 	
+	public TcpForwarder(Integer port, SecureHttpClient client) {
+		this.port = port;
+		this.client = client;
+	}
 	
 	public void waitForNextIncomingConnection() throws IOException {
-		if (serverSocket == null) {
-			serverSocket = new ServerSocket(socketServerPort);
-		}
 		try {
+			if (serverSocket == null) {
+				serverSocket = new ServerSocket(port);
+			}
 			socket = serverSocket.accept();
 		} catch (IOException e) {
 			throw new FatalIOException(e);
@@ -48,7 +57,7 @@ public class TcpForwarder {
 		socket = new Socket(serviceAddress, servicePort);
 		is = socket.getInputStream();
 		os = socket.getOutputStream();
-		logger.info("New streams open to " + serviceUrl + ":" + servicePort);
+		logger.info(prefixMessageWithService("New streams open to " + serviceUrl + ":" + servicePort));
 	}
 	
 
@@ -61,14 +70,14 @@ public class TcpForwarder {
 	
 	public BytesArray readBytesArray(boolean doNotCheckAvailableFirstRead) throws IOException {
 		BytesArray data = IOUtils.readAvailableFromIS(is, doNotCheckAvailableFirstRead);
-		logger.info("Received " + data.getSize() + " bytes from service @" + socket.getRemoteSocketAddress());
+		logger.info(prefixMessageWithService("Received " + data.getSize() + " bytes from service @" + socket.getRemoteSocketAddress()));
 		return data;
 	}
 	
 	public void writeBytesArray(BytesArray data) throws IOException {
 		os.write(data.getData(), 0, data.getSize());
 		os.flush();
-		logger.info("Sent " + data.getSize() + " bytes to service @" + socket.getRemoteSocketAddress());
+		logger.info(prefixMessageWithService("Sent " + data.getSize() + " bytes to service @" + socket.getRemoteSocketAddress()));
 	}
 	
 	public void closeCurrentStreams() {
@@ -76,7 +85,7 @@ public class TcpForwarder {
 			try {
 				is.close();
 			} catch (IOException e) {
-				logger.error("Impossible to close input stream.", e);
+				logger.error(prefixMessageWithService("Impossible to close input stream."), e);
 			}
 			is = null;
 		}
@@ -84,7 +93,7 @@ public class TcpForwarder {
 			try {
 				os.close();
 			} catch (IOException e) {
-				logger.error("Impossible to close output stream.", e);
+				logger.error(prefixMessageWithService("Impossible to close output stream."), e);
 			}
 			os = null;
 		}
@@ -92,18 +101,30 @@ public class TcpForwarder {
 			try {
 				socket.close();
 			} catch (IOException e) {
-				logger.error("Impossible to close socket.", e);
+				logger.error(prefixMessageWithService("Impossible to close socket."), e);
 			}
 			socket = null;
 		}
+		
+		logger.info(prefixMessageWithService("Current stream closed."));
 	}
 	
 	public void shutdown() {
 		closeCurrentStreams();
 		try {
-			serverSocket.close();
+			if (serverSocket != null) {
+				serverSocket.close();
+			}
 		} catch (IOException e) {
-			logger.error("Impossible t close server socket.", e);
+			logger.error("Impossible to close server socket.", e);
+		}
+	}
+	
+	private String prefixMessageWithService(Object message) {
+		if (client != null) {
+			return client.prefixMessageWithService(message);
+		} else {
+			return message.toString();
 		}
 	}
 }

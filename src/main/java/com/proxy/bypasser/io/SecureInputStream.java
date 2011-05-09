@@ -21,6 +21,8 @@ public class SecureInputStream extends InputStream {
 	
 	private int currentPosition;
 	
+	private long nextEncryptedBlockSize;
+	
 	public SecureInputStream(InputStream arg0, PrivacyMaker pm) throws IOException {
 		underStream = arg0;
 		currentPosition = 0;
@@ -32,9 +34,8 @@ public class SecureInputStream extends InputStream {
 	public int read() throws IOException {
 		if (currentBuffer.getSize() == currentPosition) {
 			try {
-				BytesArray data = IOUtils.readAvailableFromIS(underStream, true);
+				BytesArray data = IOUtils.readFromIS(underStream, nextEncryptedBlockSize);
 				if (data.getSize() == 0) return -1;
-				System.out.println("SecureInputStream -> read: " + data.getSize());
 				byte rawDecryptedData[] = pm.decrypt(data.getData(), data.getSize());
 				currentBuffer = new BytesArray(rawDecryptedData, rawDecryptedData.length);
 				currentPosition = 0;
@@ -50,6 +51,10 @@ public class SecureInputStream extends InputStream {
 		byte b = currentBuffer.getData()[currentPosition++];
 		//System.out.println("byte: " + (0x000000FF & (int) b));
 		return 0x000000FF & (int) b;
+	}
+	
+	public void setNextEncryptedBlockSize(long nextEncryptedBlockSize) {
+		this.nextEncryptedBlockSize = nextEncryptedBlockSize;
 	}
 
 }

@@ -59,7 +59,6 @@ public class SecureOutputStream extends OutputStream {
 				throw new IOException(e);
 			}
 			
-			System.out.println("Flush");
 			underStream.flush();
 			buffer = new ArrayList<byte[]>();
 			bufferSize = 0;

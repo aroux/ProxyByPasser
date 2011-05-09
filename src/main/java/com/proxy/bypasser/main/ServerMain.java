@@ -37,7 +37,16 @@ public class ServerMain {
 		// Init privacy maker
 		PrivacyMaker pm = context.getBean("privacy.maker", PrivacyMaker.class);
 		pm.init();
-		SecureHttpServer server = context.getBean("secure.http.server", SecureHttpServer.class);
+		
+		
+		// Run server
+		final SecureHttpServer server = context.getBean("secure.http.server", SecureHttpServer.class);
+		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+			@Override
+			public void run() {
+				server.shutdownServer();
+			}
+		}));
 		server.run();
 	}
 

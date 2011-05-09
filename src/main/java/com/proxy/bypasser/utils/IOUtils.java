@@ -43,6 +43,34 @@ public class IOUtils {
 		return mergeBytesArrays(dataReadArray);
 	}
 	
+	/**
+	 * Reads the given number of bytes from the input stream. The method will block
+	 * until the exact number of bytes has been read.
+	 * @param is
+	 * @param nbBytes
+	 * @return
+	 * @throws IOException
+	 */
+	public static BytesArray readFromIS(InputStream is, long nbBytes) throws IOException {
+		List<BytesArray> dataReadArray = new LinkedList<BytesArray>();
+		
+		// Read as much as possible
+		int totalReadSize = 0;
+		while (totalReadSize != nbBytes) {
+			long bufferSize = ((nbBytes - totalReadSize) >= READ_BUFFER_SIZE) 
+				? READ_BUFFER_SIZE : nbBytes - totalReadSize;
+			byte[] newData = new byte[(int) bufferSize];
+			logger.debug("Blocking read on inputstream.");
+			int readSize = is.read(newData, 0, (int) bufferSize);
+			if (readSize > 0 ){
+				dataReadArray.add(new BytesArray(newData, readSize));
+				totalReadSize += readSize;
+			}
+		}
+		// Reconstruct the bytes array
+		return mergeBytesArrays(dataReadArray);
+	}
+	
 	private static BytesArray mergeBytesArrays(List<BytesArray> dataReadArray) {
 		if (dataReadArray.size() > 0) {
 			int totalReadSize = 0;

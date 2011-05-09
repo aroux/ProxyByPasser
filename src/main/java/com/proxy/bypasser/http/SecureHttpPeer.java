@@ -23,7 +23,7 @@ import com.proxy.bypasser.io.SecureOutputStream;
 import com.proxy.bypasser.tcp.TcpForwarder;
 import com.proxy.bypasser.utils.IOUtils;
 
-public class SecureHttpPeer {
+public abstract class SecureHttpPeer  {
 	
 	private PrivacyMaker pm;
 
@@ -35,6 +35,7 @@ public class SecureHttpPeer {
 	private Object readObjectFromEntity(HttpEntity entity) throws IllegalStateException, IOException, ClassNotFoundException {
 			InputStream is = entity.getContent();
 			SecureInputStream sis = new SecureInputStream(is, pm);
+			sis.setNextEncryptedBlockSize(entity.getContentLength());
 			ObjectInputStream ois = new ObjectInputStream(sis);
 			Object object = ois.readObject();
 			ois.close();
@@ -57,21 +58,18 @@ public class SecureHttpPeer {
 		return bytesArray;
 	}
 	
-	protected HttpEntity genEncryptedEntityFromObject(Object o) throws IOException, ClassNotFoundException {
+	protected ByteArrayEntity genEncryptedEntityFromObject(Object o) throws IOException, ClassNotFoundException {
 		ByteArrayOutputStream bos = new ByteArrayOutputStream();
 	    ObjectOutputStream oos = new ObjectOutputStream(new SecureOutputStream(bos, pm));
-		//ObjectOutputStream oos = new ObjectOutputStream(bos);
 	    oos.writeObject(o);
 	    oos.flush();
 	    oos.close();
 	    bos.close();
 	    ByteArrayEntity bae = new ByteArrayEntity(bos.toByteArray());
-	    Object ob = readObjectFromEntity(bae);
 	    return bae;
 	}
 	
 	public void setPm(PrivacyMaker pm) {
 		this.pm = pm;
 	}
-	
 }

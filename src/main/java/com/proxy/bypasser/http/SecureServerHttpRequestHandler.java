@@ -10,6 +10,7 @@ import org.apache.http.HttpEntityEnclosingRequest;
 import org.apache.http.HttpException;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
+import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.entity.SerializableEntity;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.protocol.HttpRequestHandler;
@@ -51,18 +52,24 @@ public class SecureServerHttpRequestHandler implements HttpRequestHandler {
 					+ internalRequest.getData().getSize() + " bytes from " //
 					+ ((HttpRequest) request).getFirstHeader("host") + " for service " + internalRequest.getUrlService() //
 					+ ":" + internalRequest.getPortService());
-			if (!tcpForwarder.canRead()) {
-				tcpForwarder.openNewStreams(internalRequest.getUrlService(), internalRequest.getPortService());
-			}
-			if (internalRequest.getRequestType().equals(Request.RequestType.FORWARD)) {
-				tcpForwarder.writeBytesArray(internalRequest.getData());
-			}
 			
-			BytesArray dataReadFromService = tcpForwarder.readBytesArray(false);
-			Response internalResponse = new Response(Response.ResponseType.OK, dataReadFromService);
-			response.setEntity(secureHttpServer.genEncryptedEntityFromObject(internalResponse));
-	        
-	        logger.debug("Responding back to client");
+			Response internalResponse;
+			if (internalRequest.getRequestType().equals(Request.RequestType.REINIT_SERVICE_STREAM)) {
+				tcpForwarder.closeCurrentStreams();
+				tcpForwarder.openNewStreams(internalRequest.getUrlService(), internalRequest.getPortService());
+				internalResponse = new Response(Response.ResponseType.OK, new BytesArray(null, 0));
+			} else {
+				if (internalRequest.getRequestType().equals(Request.RequestType.FORWARD)) {
+					tcpForwarder.writeBytesArray(internalRequest.getData());
+				}
+				
+				BytesArray dataReadFromService = tcpForwarder.readBytesArray(false);
+				internalResponse = new Response(Response.ResponseType.OK, dataReadFromService);
+			}
+			ByteArrayEntity encryptedEntity = secureHttpServer.genEncryptedEntityFromObject(internalResponse);
+			response.setHeader("Content-length", String.valueOf(encryptedEntity.getContentLength()));
+			response.setEntity(encryptedEntity);
+	        logger.debug("Responding back to client " + encryptedEntity.getContentLength() + " bytes.");
 		} catch (IllegalStateException e) {
 			processError("Encrypt/decrypt error.", e, response);
 		} catch (ClassNotFoundException e) {

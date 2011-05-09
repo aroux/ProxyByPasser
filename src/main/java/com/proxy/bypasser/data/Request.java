@@ -39,7 +39,7 @@ public class Request implements Serializable {
 	}
 	
 	public enum RequestType implements Serializable {
-		FORWARD(0), ASK_FOR_DATA(1);
+		FORWARD(0), ASK_FOR_DATA(1), REINIT_SERVICE_STREAM(2);
 		
 		private final int code;
 

@@ -1,35 +1,40 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
-       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-       xsi:schemaLocation="http://www.springframework.org/schema/beans
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
            http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
 
-	<bean id="property.configurer" class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
-	<property name="location">
-		<value>classpath:properties/client.properties</value>
-	</property>
+	<bean id="property.configurer"
+		class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+		<property name="location">
+			<value>classpath:properties/client.properties</value>
+		</property>
 	</bean>
 
-  <bean id="secure.http.client" class="com.proxy.bypasser.http.SecureHttpClient">
-  	<property name="pm" ref="privacy.maker" />
-  	<property name="serverUrl" value="${secure.http.client.remote.url}" />
-  	<property name="serverPort" value="${secure.http.client.remote.port}" />
-  	<property name="serviceUrl" value="${secure.http.client.service.url}" />
-  	<property name="servicePort" value="${secure.http.client.service.port}" />
-  	<property name="proxyUrl" value="${secure.http.client.proxy.url}" />
-  	<property name="proxyPort" value="${secure.http.client.proxy.port}" />
-  	<property name="proxyEnabled" value="${secure.http.client.proxy.enabled}" />
-  	<property name="maxPollerSleepTime" value="${secure.http.client.poller.sleep.time.max}" />
-  	<property name="minPollerSleepTime" value="${secure.http.client.poller.sleep.time.min}" />
-  	<property name="incrementPollerSleepTime" value="${secure.http.client.poller.sleep.time.increment}" />
-  	  	  	
-  </bean>
-  
-  <bean id="privacy.maker" class="com.proxy.bypasser.crypt.PrivacyMaker">
-  	<property name="algorithm" value="${privacy.maker.algorithm}" />
-  	<property name="keySize" value="${privacy.maker.key.size}" />
-  	<property name="keyFileName" value="${privacy.maker.key.filename}" />
-  	<property name="dataPath" value="${privacy.maker.data.path}" />
-  </bean>
+
+	<bean id="secure.http.client" class="com.proxy.bypasser.http.SecureHttpClient">
+		<property name="pm" ref="privacy.maker" />
+		<property name="serverUrl" value="${secure.http.client.remote.url}" />
+		<property name="serverPort" value="${secure.http.client.remote.port}" />
+		<property name="proxyUrl" value="${secure.http.client.proxy.url}" />
+		<property name="proxyPort" value="${secure.http.client.proxy.port}" />
+		<property name="proxyEnabled" value="${secure.http.client.proxy.enabled}" />
+		<property name="maxPollerSleepTime" value="${secure.http.client.poller.sleep.time.max}" />
+		<property name="minPollerSleepTime" value="${secure.http.client.poller.sleep.time.min}" />
+		<property name="incrementPollerSleepTime"
+			value="${secure.http.client.poller.sleep.time.increment}" />
+
+	</bean>
+
+	<bean id="privacy.maker" class="com.proxy.bypasser.crypt.PrivacyMaker">
+		<property name="algorithm" value="${privacy.maker.algorithm}" />
+		<property name="keySize" value="${privacy.maker.key.size}" />
+		<property name="keyFileName" value="${privacy.maker.key.filename}" />
+		<property name="dataPath" value="${privacy.maker.data.path}" />
+	</bean>
+	
+	<bean id="services.manager" class="com.proxy.bypasser.services.ServicesManager">
+		<property name="pathToServicesProperties" value="${secure.http.client.service.manager.properties.dir}"/>
+	</bean>
 
 </beans>

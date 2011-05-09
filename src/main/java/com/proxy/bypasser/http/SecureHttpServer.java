@@ -5,6 +5,12 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
@@ -35,14 +41,17 @@ public class SecureHttpServer extends SecureHttpPeer {
 	private HttpService httpService;
 	private HttpParams params;
 	private HttpProcessor httpProc;
-	private DefaultHttpServerConnection serverConnection;
 	private HttpContext context;
 	private ServerSocket serverSocket;
+	
+	private boolean active;
+	
+	private HashMap<String, ServerConnectionHandler> handlers;
 	
 	public SecureHttpServer(Integer httpServerPort) throws NoSuchAlgorithmException, NoSuchPaddingException, FileNotFoundException, IOException, ClassNotFoundException  {
 		super();
 		serverSocket = new ServerSocket(httpServerPort);
-		serverConnection = new DefaultHttpServerConnection();
+		handlers = new HashMap<String, ServerConnectionHandler>();
 		
 		params = new BasicHttpParams();
 		HttpProtocolParamBean paramsBean = new HttpProtocolParamBean(params);
@@ -67,28 +76,85 @@ public class SecureHttpServer extends SecureHttpPeer {
 	}
 	
 	public void run() throws IOException, HttpException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
-		boolean active = true;
+		active = true;
 		context.setAttribute("tcpForwarder", tcpForwarder);
 		context.setAttribute("secureHttpServer", this);
 		while (active) {
+			logger.info("Listening for new connection.");
 			Socket socket = serverSocket.accept();
-			serverConnection.bind(socket, params);
-			//tcpForwarder.openNewStreams();
+			String socketId = socket.getRemoteSocketAddress().toString();
+			ServerConnectionHandler sch = new ServerConnectionHandler(socket, socketId);
+			logger.info("Register ServerConnectionHandler with id " + socketId);
+			handlers.put(socketId, sch);
+			sch.start();
+		}
+		serverSocket.close();
+	}
+	
+	public void shutdownServer() {
+		logger.info("Server is shutting down...");
+		active = false;
+		@SuppressWarnings("unchecked")
+		HashMap<String, ServerConnectionHandler> handlersCopy = (HashMap<String, ServerConnectionHandler>) handlers.clone();
+		for (ServerConnectionHandler handler : handlersCopy.values()) {
+			handler.shutdown();
+		}
+		logger.info("Shutting down completed.");
+	}
+	
+	public void closeServiceStreams() {
+		tcpForwarder.closeCurrentStreams();
+	}
+	
+	class ServerConnectionHandler extends Thread {
+		
+		private Socket socket;
+		
+		private boolean active;
+		
+		private String socketId;
+		
+		private DefaultHttpServerConnection serverConnection;
+		
+		public ServerConnectionHandler(Socket socket, String socketId) {
+			this.socket = socket;
+			this.socketId = socketId;
+		}
+		
+		@Override
+		public void run() {
+			active = true;
+			serverConnection = new DefaultHttpServerConnection();
+			logger.info("New connection with " + socket.getRemoteSocketAddress() + " open.");
 			try {
+				serverConnection.bind(socket, params);
 			    while (active && serverConnection.isOpen()) {
 			        httpService.handleRequest(serverConnection, context);
 			    }
 			} catch (IOException e) {
 				logger.info("Client " + socket.getRemoteSocketAddress() + " has closed connection");
+			} catch (HttpException e) {
+				logger.error("Http error with client " + socket.getRemoteSocketAddress(), e);
 			} finally {
+				try {
+					serverConnection.shutdown();
+					socket.close();
+				} catch (IOException e) {
+					logger.error("Impossible to shutdown ServerConnection.", e);
+				}
+			}
+			
+			logger.info("Unregister ServerConnectionHandler with id " + socketId);
+			SecureHttpServer.this.handlers.remove(socketId);
+		}
+		
+		public void shutdown() {
+			this.active = false;
+			try {
 				serverConnection.shutdown();
-				socket.close();
+			} catch (IOException e) {
+				logger.error("Impossible to shutdown ServerConnection.", e);
 			}
 		}
-		serverSocket.close();
-	}
-	
-	public void closeServiceStreams() {
-		tcpForwarder.closeCurrentStreams();
 	}
 }
