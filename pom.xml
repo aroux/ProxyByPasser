@@ -10,8 +10,8 @@
 	<name>ProxyByPasser</name>
 
 	<scm>
-		<connection>scm:git:git://github.com/aroux/ProxyBypasser</connection>
-		<developerConnection>scm:git:git://github.com/aroux/ProxyBypasser</developerConnection>
+		<connection>scm:git:git@github.com:aroux/ProxyBypasser.git</connection>
+		<developerConnection>scm:git:git@github.com:aroux/ProxyBypasser.git</developerConnection>
 		<!-- <url>http://somerepository.com/view.cvs</url> -->
 	</scm>
 
