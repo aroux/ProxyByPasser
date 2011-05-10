@@ -9,6 +9,12 @@
 	<version>1.0.0-SNAPSHOT</version>
 	<name>ProxyByPasser</name>
 
+	<scm>
+		<connection>scm:git:git://github.com/aroux/ProxyBypasser</connection>
+		<developerConnection>scm:git:git://github.com/aroux/ProxyBypasser</developerConnection>
+		<!-- <url>http://somerepository.com/view.cvs</url> -->
+	</scm>
+
 	<dependencies>
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
@@ -69,12 +75,15 @@
 					</execution>
 				</executions>
 			</plugin>
-			
-			<scm>
-			    <connection>scm:git:git://github.com/aroux/ProxyBypasser</connection>
-			    <developerConnection>scm:git:git://github.com/aroux/ProxyBypasser</developerConnection>
-<!-- 			    <url>http://somerepository.com/view.cvs</url> -->
-			</scm>
+
+			<!-- <plugin> -->
+			<!-- <groupId>org.apache.maven.plugins</groupId> -->
+			<!-- <artifactId>maven-scm-plugin</artifactId> -->
+			<!-- <version>1.0</version> -->
+			<!-- <configuration> -->
+			<!-- <goals>install</goals> -->
+			<!-- </configuration> -->
+			<!-- </plugin> -->
 
 			<!-- <plugin> -->
 			<!-- <groupId>org.codehaus.mojo</groupId> -->
@@ -103,6 +112,6 @@
 			<!-- </programs> -->
 			<!-- </configuration> -->
 			<!-- </plugin> -->
-			</plugins>
+		</plugins>
 	</build>
 </project>
