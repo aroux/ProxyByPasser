@@ -16,7 +16,6 @@ import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import com.proxy.bypasser.crypt.PrivacyMaker;
 import com.proxy.bypasser.http.SecureHttpClient;
-import com.proxy.bypasser.http.SecureHttpServer;
 import com.proxy.bypasser.services.ServiceInfo;
 import com.proxy.bypasser.services.ServicesManager;
 

@@ -5,12 +5,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.util.Collections;
-import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
@@ -38,10 +33,6 @@ public class SecureHttpServer extends SecureHttpPeer {
 	
 	Logger logger = Logger.getLogger(SecureServerHttpRequestHandler.class);
 	
-	private HttpService httpService;
-	private HttpParams params;
-	private HttpProcessor httpProc;
-	private HttpContext context;
 	private ServerSocket serverSocket;
 	
 	private boolean active;
@@ -52,33 +43,10 @@ public class SecureHttpServer extends SecureHttpPeer {
 		super();
 		serverSocket = new ServerSocket(httpServerPort);
 		handlers = new HashMap<String, ServerConnectionHandler>();
-		
-		params = new BasicHttpParams();
-		HttpProtocolParamBean paramsBean = new HttpProtocolParamBean(params);
-		paramsBean.setContentCharset("UTF-8");
-		paramsBean.setVersion(HttpVersion.HTTP_1_1);
-		
-		httpProc = new BasicHttpProcessor();
-		context = new BasicHttpContext();
-
-		HttpRequestHandlerRegistry handlerResolver = 
-		    new HttpRequestHandlerRegistry();
-		handlerResolver.register("*", new SecureServerHttpRequestHandler());
-		
-		tcpForwarder = new TcpForwarder();
-		
-		httpService = new HttpService(
-		        httpProc, 
-		        new DefaultConnectionReuseStrategy(), 
-		        new DefaultHttpResponseFactory(),
-		        handlerResolver,
-		        params);
 	}
 	
 	public void run() throws IOException, HttpException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
 		active = true;
-		context.setAttribute("tcpForwarder", tcpForwarder);
-		context.setAttribute("secureHttpServer", this);
 		while (active) {
 			logger.info("Listening for new connection.");
 			Socket socket = serverSocket.accept();
@@ -102,10 +70,6 @@ public class SecureHttpServer extends SecureHttpPeer {
 		logger.info("Shutting down completed.");
 	}
 	
-	public void closeServiceStreams() {
-		tcpForwarder.closeCurrentStreams();
-	}
-	
 	class ServerConnectionHandler extends Thread {
 		
 		private Socket socket;
@@ -116,9 +80,45 @@ public class SecureHttpServer extends SecureHttpPeer {
 		
 		private DefaultHttpServerConnection serverConnection;
 		
+		private HttpService httpService;
+		private HttpParams params;
+		private HttpProcessor httpProc;
+		private HttpContext context;
+		
+		protected TcpForwarder tcpForwarder;
+		
+		public void closeServiceStreams() {
+			tcpForwarder.closeCurrentStreams();
+		}
+		
 		public ServerConnectionHandler(Socket socket, String socketId) {
 			this.socket = socket;
 			this.socketId = socketId;
+			
+			params = new BasicHttpParams();
+			HttpProtocolParamBean paramsBean = new HttpProtocolParamBean(params);
+			paramsBean.setContentCharset("UTF-8");
+			paramsBean.setVersion(HttpVersion.HTTP_1_1);
+			
+			httpProc = new BasicHttpProcessor();
+			context = new BasicHttpContext();
+
+			HttpRequestHandlerRegistry handlerResolver = 
+			    new HttpRequestHandlerRegistry();
+			handlerResolver.register("*", new SecureServerHttpRequestHandler());
+			
+			tcpForwarder = new TcpForwarder();
+			
+			httpService = new HttpService(
+			        httpProc, 
+			        new DefaultConnectionReuseStrategy(), 
+			        new DefaultHttpResponseFactory(),
+			        handlerResolver,
+			        params);
+			
+			context.setAttribute("tcpForwarder", tcpForwarder);
+			context.setAttribute("secureHttpServer", SecureHttpServer.this);
+			context.setAttribute("serverConnectionHandler", this);
 		}
 		
 		@Override

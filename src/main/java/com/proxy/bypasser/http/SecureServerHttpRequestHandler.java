@@ -1,9 +1,5 @@
 package com.proxy.bypasser.http;
 import java.io.IOException;
-import java.security.InvalidKeyException;
-
-import javax.crypto.BadPaddingException;
-import javax.crypto.IllegalBlockSizeException;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpEntityEnclosingRequest;
@@ -11,12 +7,10 @@ import org.apache.http.HttpException;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
 import org.apache.http.entity.ByteArrayEntity;
-import org.apache.http.entity.SerializableEntity;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.protocol.HttpRequestHandler;
 import org.apache.log4j.Logger;
 
-import com.proxy.bypasser.crypt.PrivacyMaker;
 import com.proxy.bypasser.data.BytesArray;
 import com.proxy.bypasser.data.Request;
 import com.proxy.bypasser.data.Response;
@@ -26,10 +20,11 @@ public class SecureServerHttpRequestHandler implements HttpRequestHandler {
 	
 	Logger logger = Logger.getLogger(SecureServerHttpRequestHandler.class);
 	
-	private void processServiceIOError(String errorText, IOException e, HttpResponse response, SecureHttpServer secureHttpServer) {
+	private void processServiceIOError(String errorText, IOException e, HttpResponse response, 
+			SecureHttpServer.ServerConnectionHandler serverConnectionHandler) {
 		logger.fatal(errorText, e);
 		response.addHeader("Content-Length", "0");
-		secureHttpServer.closeServiceStreams();
+		serverConnectionHandler.closeServiceStreams();
 	}
 	
 	private void processError(String errorText, Exception e, HttpResponse response) {
@@ -44,6 +39,7 @@ public class SecureServerHttpRequestHandler implements HttpRequestHandler {
     	
 		TcpForwarder tcpForwarder = (TcpForwarder) context.getAttribute("tcpForwarder");
 		SecureHttpServer secureHttpServer = (SecureHttpServer) context.getAttribute("secureHttpServer");
+		SecureHttpServer.ServerConnectionHandler serverConnectionHandler = (SecureHttpServer.ServerConnectionHandler) context.getAttribute("serverConnectionHandler");
 		try {
 	    	HttpEntity entity = ((HttpEntityEnclosingRequest) request).getEntity();
 			
@@ -75,7 +71,7 @@ public class SecureServerHttpRequestHandler implements HttpRequestHandler {
 		} catch (ClassNotFoundException e) {
 			processError("Impossible to deserialize request.", e, response);
 		} catch (IOException e) {
-			processServiceIOError("Service socket error.", e, response, secureHttpServer);
+			processServiceIOError("Service socket error.", e, response, serverConnectionHandler);
 		}
 		
 		

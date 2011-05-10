@@ -18,7 +18,7 @@ if [ ! -z $PID ]; then
 fi
 
 EXTRA_JVM_ARGUMENTS=-Dlog4j.configuration=logging/log4j.${APP}.properties
-CLASSPATH=${BASEDIR}/lib/*
+CLASSPATH="${BASEDIR}/config:${BASEDIR}/lib/*"
 
 if [ ! -d ${BASEDIR}/logs ]; then
 	mkdir ${BASEDIR}/logs

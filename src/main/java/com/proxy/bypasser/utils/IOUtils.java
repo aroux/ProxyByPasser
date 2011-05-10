@@ -7,9 +7,7 @@ import java.util.List;
 import org.apache.log4j.Logger;
 
 import com.proxy.bypasser.data.BytesArray;
-import com.proxy.bypasser.tcp.TcpForwarder;
-
-
+import com.proxy.bypasser.io.exc.SocketClosedException;
 
 public class IOUtils {
 	
@@ -36,6 +34,8 @@ public class IOUtils {
 				if (readSize > 0 ){
 					dataReadArray.add(new BytesArray(newData, readSize));
 					totalReadSize += readSize;
+				} else if (readSize < 0) {
+					throw new SocketClosedException();
 				}
 			} while (is.available() != 0);
 		}

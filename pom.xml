@@ -30,6 +30,16 @@
 	</dependencies>
 
 	<build>
+
+		<resources>
+			<resource>
+				<directory>src/main/resources/</directory>
+				<excludes>
+					<exclude>**</exclude>
+				</excludes>
+			</resource>
+		</resources>
+
 		<plugins>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -41,11 +51,8 @@
 				</configuration>
 			</plugin>
 
-
-
 			<plugin>
 				<artifactId>maven-assembly-plugin</artifactId>
-				<version>2.2.1</version>
 				<configuration>
 					<descriptors>
 						<descriptor>src/main/assembly/app-assembly.xml</descriptor>
@@ -62,34 +69,40 @@
 					</execution>
 				</executions>
 			</plugin>
+			
+			<scm>
+			    <connection>scm:git:git://github.com/aroux/ProxyBypasser</connection>
+			    <developerConnection>scm:git:git://github.com/aroux/ProxyBypasser</developerConnection>
+<!-- 			    <url>http://somerepository.com/view.cvs</url> -->
+			</scm>
 
-			<plugin>
-			<groupId>org.codehaus.mojo</groupId>
-			<artifactId>appassembler-maven-plugin</artifactId>
-			<version>1.1.1</version>
-			<configuration>
-			<configurationDirectory>config</configurationDirectory>
-			<configurationSourceDirectory>src/main/resources</configurationSourceDirectory>
-			<copyConfigurationDirectory>true</copyConfigurationDirectory>
-			<includeConfigurationDirectoryInClasspath>true</includeConfigurationDirectoryInClasspath>
-			<platforms>
-			<platform>windows</platform>
-			<platform>unix</platform>
-			</platforms>
-			<programs>
-			<program>
-			<mainClass>com.proxy.bypasser.main.ServerMain</mainClass>
-			<name>secure_http_server.sh</name>
-<!-- 			<arguments>-Dlog4j.configuration=config/log4j.server.properties</arguments> -->
-			</program>
-			<program>
-			<mainClass>com.proxy.bypasser.main.ClientMain</mainClass>
-			<name>secure_http_client.sh</name>
-<!-- 			<arguments>-Dlog4j.configuration=config/log4j.client.properties</arguments> -->
-			</program>
-			</programs>
-			</configuration>
-			</plugin>
-		</plugins>
+			<!-- <plugin> -->
+			<!-- <groupId>org.codehaus.mojo</groupId> -->
+			<!-- <artifactId>appassembler-maven-plugin</artifactId> -->
+			<!-- <version>1.1.1</version> -->
+			<!-- <configuration> -->
+			<!-- <configurationDirectory>config</configurationDirectory> -->
+			<!-- <configurationSourceDirectory>src/main/resources</configurationSourceDirectory> -->
+			<!-- <copyConfigurationDirectory>true</copyConfigurationDirectory> -->
+			<!-- <includeConfigurationDirectoryInClasspath>true</includeConfigurationDirectoryInClasspath> -->
+			<!-- <platforms> -->
+			<!-- <platform>windows</platform> -->
+			<!-- <platform>unix</platform> -->
+			<!-- </platforms> -->
+			<!-- <programs> -->
+			<!-- <program> -->
+			<!-- <mainClass>com.proxy.bypasser.main.ServerMain</mainClass> -->
+			<!-- <name>secure_http_server.sh</name> -->
+			<!-- <arguments>-Dlog4j.configuration=config/log4j.server.properties</arguments> -->
+			<!-- </program> -->
+			<!-- <program> -->
+			<!-- <mainClass>com.proxy.bypasser.main.ClientMain</mainClass> -->
+			<!-- <name>secure_http_client.sh</name> -->
+			<!-- <arguments>-Dlog4j.configuration=config/log4j.client.properties</arguments> -->
+			<!-- </program> -->
+			<!-- </programs> -->
+			<!-- </configuration> -->
+			<!-- </plugin> -->
+			</plugins>
 	</build>
 </project>

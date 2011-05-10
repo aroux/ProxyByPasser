@@ -3,37 +3,27 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 
-import org.apache.http.HttpClientConnection;
-import org.apache.http.HttpConnection;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.conn.ClientConnectionManager;
-import org.apache.http.conn.ClientConnectionRequest;
-import org.apache.http.conn.ConnectionPoolTimeoutException;
-import org.apache.http.conn.ManagedClientConnection;
 import org.apache.http.conn.params.ConnRoutePNames;
-import org.apache.http.conn.routing.HttpRoute;
 import org.apache.http.conn.scheme.PlainSocketFactory;
 import org.apache.http.conn.scheme.Scheme;
 import org.apache.http.conn.scheme.SchemeRegistry;
-import org.apache.http.entity.SerializableEntity;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.SingleClientConnManager;
-import org.apache.http.message.BasicHttpRequest;
 import org.apache.http.protocol.BasicHttpContext;
 import org.apache.http.protocol.HttpContext;
 import org.apache.log4j.Logger;
-import org.springframework.beans.factory.InitializingBean;
 
 import com.proxy.bypasser.data.BytesArray;
 import com.proxy.bypasser.data.Request;
@@ -68,6 +58,8 @@ public class SecureHttpClient extends SecureHttpPeer implements Cloneable, Runna
 	
 	protected ServiceInfo serviceInfo;
 	
+	protected TcpForwarder tcpForwarder;
+	
 	public SecureHttpClient() throws NoSuchAlgorithmException, NoSuchPaddingException, FileNotFoundException, IOException, ClassNotFoundException  {
 		super();
 	}
@@ -90,21 +82,7 @@ public class SecureHttpClient extends SecureHttpPeer implements Cloneable, Runna
 		HttpHost proxy = new HttpHost(proxyUrl, proxyPort);
 		httpClient.getParams().setParameter(ConnRoutePNames.DEFAULT_PROXY, proxy);
 	}
-	
-//	private void initConnectionWithServer() throws ConnectionPoolTimeoutException, InterruptedException {
-//		Scheme http = new Scheme("http", serverPort, PlainSocketFactory.getSocketFactory());
-//		SchemeRegistry sr = new SchemeRegistry();
-//		sr.register(http);
-//		ClientConnectionManager connMrg = new SingleClientConnManager(sr);
-//		
-//		// Request new connection. This can be a long process
-//		ClientConnectionRequest connRequest = connMrg.requestConnection(
-//		        new HttpRoute(new HttpHost(serverUrl, serverPort)), null);
-//
-//		// Wait for connection up to 10 sec
-//		con = connRequest.getConnection(10, TimeUnit.SECONDS);
-//	}
-//	
+
 	
 	@Override
 	public void run()  {
@@ -168,23 +146,12 @@ public class SecureHttpClient extends SecureHttpPeer implements Cloneable, Runna
 				logger.fatal(prefixMessageWithService("Problem with IO."), e);
 				closeCurrentConnection();
 			}
-//			} catch (InterruptedException e) {
-//				fatal("Problem with IO.", e);
-//				closeCurrentConnection();
-//			}	
 		}
 	}
 	
 	private void closeCurrentConnection() {
 		doNotReadData = true;
 		tcpForwarder.closeCurrentStreams();
-//		if (con != null) {
-//			try {
-//				con.abortConnection();
-//			} catch (IOException e) {
-//				// Do nothing
-//			}
-//		}
 	}
 	
 	private BytesArray sendForwardRequest(BytesArray data) throws InvalidKeyException, BadPaddingException, IllegalBlockSizeException, IllegalStateException, IOException, ClassNotFoundException {

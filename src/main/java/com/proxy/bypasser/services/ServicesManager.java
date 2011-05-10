@@ -26,8 +26,8 @@ public class ServicesManager implements InitializingBean {
 	@Override
 	public void afterPropertiesSet() throws Exception {
 		URL directoryUrl = this.getClass().getClassLoader().getResource(pathToServicesProperties);
-		String directoryPath = directoryUrl.getFile();
-		File directory = new File(directoryPath);
+		System.out.println("url:" + directoryUrl);
+		File directory = new File(directoryUrl.toURI());
 		
 		if (directory.isDirectory()) {
 			for (File file : directory.listFiles()) {

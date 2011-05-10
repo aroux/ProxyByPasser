@@ -12,6 +12,7 @@ import org.apache.log4j.Logger;
 import com.proxy.bypasser.data.BytesArray;
 import com.proxy.bypasser.http.SecureHttpClient;
 import com.proxy.bypasser.io.exc.FatalIOException;
+import com.proxy.bypasser.io.exc.SocketClosedException;
 import com.proxy.bypasser.utils.IOUtils;
 
 public class TcpForwarder {
@@ -65,16 +66,27 @@ public class TcpForwarder {
 		if (socket == null) {
 			return false;
 		}
-		return !socket.isInputShutdown();
+		return !socket.isClosed() && !socket.isInputShutdown();
 	}
 	
 	public BytesArray readBytesArray(boolean doNotCheckAvailableFirstRead) throws IOException {
-		BytesArray data = IOUtils.readAvailableFromIS(is, doNotCheckAvailableFirstRead);
-		logger.info(prefixMessageWithService("Received " + data.getSize() + " bytes from service @" + socket.getRemoteSocketAddress()));
-		return data;
+		try {
+			BytesArray data = IOUtils.readAvailableFromIS(is, doNotCheckAvailableFirstRead);
+			logger.info(prefixMessageWithService("Received " + data.getSize() + " bytes from service @" + socket.getRemoteSocketAddress()));
+			return data;
+		} catch (SocketClosedException e) {
+			logger.info(prefixMessageWithService("Socket has been closed. Closing current stream."));
+			closeCurrentStreams();
+			return new BytesArray(null, 0);
+		}
 	}
 	
 	public void writeBytesArray(BytesArray data) throws IOException {
+		
+//		if (socket.isClosed()) {
+//			throw new SocketClosedException();
+//		}
+		
 		os.write(data.getData(), 0, data.getSize());
 		os.flush();
 		logger.info(prefixMessageWithService("Sent " + data.getSize() + " bytes to service @" + socket.getRemoteSocketAddress()));
