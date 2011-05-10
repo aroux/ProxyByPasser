@@ -5,7 +5,7 @@
 
 	<groupId>com.proxy.utils</groupId>
 	<artifactId>proxybypasser</artifactId>
-	<version>0.0.2-SNAPSHOT</version>
+	<version>0.0.1-SNAPSHOT</version>
 	<name>ProxyByPasser</name>
 
 	<scm>
