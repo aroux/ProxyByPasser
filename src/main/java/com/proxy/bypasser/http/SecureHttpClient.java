@@ -1,8 +1,13 @@
 package com.proxy.bypasser.http;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.crypto.BadPaddingException;
@@ -28,21 +33,17 @@ import org.apache.log4j.Logger;
 import com.proxy.bypasser.data.BytesArray;
 import com.proxy.bypasser.data.Request;
 import com.proxy.bypasser.data.Response;
-import com.proxy.bypasser.io.exc.FatalIOException;
 import com.proxy.bypasser.services.ServiceInfo;
 import com.proxy.bypasser.tcp.TcpForwarder;
 
 public class SecureHttpClient extends SecureHttpPeer implements Cloneable, Runnable {
 	
-	private HttpClient httpClient;
-	//private ManagedClientConnection con;
-	private HttpContext httpContext;
+	private ServerSocket serverSocket;
 	
 	private String serverUrl;
 	private Integer serverPort; 
 		
 	private boolean running;
-	private boolean doNotReadData;
 	
 	private Boolean proxyEnabled;
 	private String proxyUrl;
@@ -52,53 +53,89 @@ public class SecureHttpClient extends SecureHttpPeer implements Cloneable, Runna
 	private int minPollerSleepTime;
 	private int incrementPollerSleepTime;
 	
-	private HttpDataPoller poller;
-	
 	protected Logger logger = Logger.getLogger(SecureHttpClient.class);
 	
 	protected ServiceInfo serviceInfo;
 	
-	protected TcpForwarder tcpForwarder;
+	private HashMap<String, ClientConnectionHandler> handlers;
 	
 	public SecureHttpClient() throws NoSuchAlgorithmException, NoSuchPaddingException, FileNotFoundException, IOException, ClassNotFoundException  {
 		super();
+		handlers = new HashMap<String, ClientConnectionHandler>();
 	}
-	
-	public void init() throws Exception {
-		Scheme http = new Scheme("http", serverPort, PlainSocketFactory.getSocketFactory());
-		SchemeRegistry sr = new SchemeRegistry();
-		sr.register(http);
-		ClientConnectionManager connMrg = new SingleClientConnManager(sr);
-		httpClient = new DefaultHttpClient(connMrg);
-		if (proxyEnabled) {
-			initProxyConfiguration();
-		}
-		httpContext = new BasicHttpContext();
-		
-		tcpForwarder = new TcpForwarder(serviceInfo.getSecureClientPort(), this);
-	}
-	
-	private void initProxyConfiguration() {
-		HttpHost proxy = new HttpHost(proxyUrl, proxyPort);
-		httpClient.getParams().setParameter(ConnRoutePNames.DEFAULT_PROXY, proxy);
-	}
-
 	
 	@Override
 	public void run()  {
-		try {
-			init();
-		} catch (Exception e1) {
-			logger.fatal(prefixMessageWithService("Impossible to init SecureHttpClient. Exiting."));
-			return;
-		}
 		running = true;
 		logger.info(prefixMessageWithService("Running secure http client for service " + serviceInfo.getUrl() + ":" + serviceInfo.getPort() //
 				+ ". Listening on port " + serviceInfo.getSecureClientPort() + "."));
-		while (running) {
+		try {
+			serverSocket = new ServerSocket(serviceInfo.getSecureClientPort());
+			while (running) {
+				Socket socket = serverSocket.accept();
+				try {
+					String socketId = socket.getRemoteSocketAddress().toString();
+					ClientConnectionHandler cch = new ClientConnectionHandler(socket, socketId);
+					logger.info(prefixMessageWithService("Register ClientrConnectionHandler with id " + socketId));
+					handlers.put(socketId, cch);
+					cch.start();
+				} catch (IOException e) {
+					logger.fatal(prefixMessageWithService("IO Exception when creating Client connection handler. Skipping connection."), e);
+				}
+			}
+		} catch (IOException e) {
+			logger.fatal(prefixMessageWithService("Fatal IO Exception. Shutdown all."), e);
+			running = false;
+		}
+		shutdown();
+	}
+
+	
+	private void shutdown() {
+		try {
+			serverSocket.close();
+		} catch (IOException e) {
+			logger.error("Impossible to close server socket.", e);
+		}
+	}
+	
+	private class ClientConnectionHandler extends Thread {
+		private TcpForwarder tcpForwarder;
+		
+		private HttpClient httpClient;
+		private HttpContext httpContext;
+		
+		private HttpDataPoller poller;
+		
+		private String socketId;
+		private String serviceInstanceId;
+		
+		public ClientConnectionHandler(Socket socket, String socketId) throws IOException {
+			this.socketId = socketId;
+			generatingServiceInstanceId();
+			tcpForwarder = new TcpForwarder(socket, prefixMessageWithService(""));
+			tcpForwarder.setServiceInstanceId(serviceInstanceId);
+		}
+		
+		private void generatingServiceInstanceId() {
+			Date date = new Date();
+			Long time = date.getTime();
+			
+			Random rand = new Random(time);
+			Long randLong = rand.nextLong();
+			serviceInstanceId = serviceInfo.getUrl() + ":" + serviceInfo.getPort() + "|" + time + randLong;
+		}
+		
+		@Override
+		public void run() {
 			try {
-				tcpForwarder.waitForNextIncomingConnection();
-				doNotReadData = false;
+				init();
+			} catch (Exception e1) {
+				logger.fatal(tcpForwarder.prefixMessageWithService("Impossible to init SecureHttpClient. Exiting."));
+				return;
+			}
+			
+			try {
 				// To be sure that the service is not already connected server side
 				// and therefore in a invalid state, we ask the server to close its
 				// potential connection.
@@ -111,157 +148,175 @@ public class SecureHttpClient extends SecureHttpPeer implements Cloneable, Runna
 					BytesArray data = tcpForwarder.readBytesArray(true);
 					if (data.getSize() > 0) {
 						synchronized (this) {
-							if (!doNotReadData) {
-								if (poller != null) poller.interruptPolling();
-								BytesArray decryptedData = sendForwardRequest(data);
-								if (decryptedData.getSize() > 0) {
-									tcpForwarder.writeBytesArray(decryptedData);
-								}
+							if (poller != null) poller.interruptPolling();
+							BytesArray decryptedData = sendForwardRequest(data);
+							if (decryptedData.getSize() > 0) {
+								tcpForwarder.writeBytesArray(decryptedData);
 							}
 						}
 					}
 				}
+				shutdown();
+			} catch (InvalidKeyException e) {
+				logger.fatal(tcpForwarder.prefixMessageWithService("Encrypt/decrypt error."), e);
+				shutdown();
+			} catch (BadPaddingException e) {
+				logger.fatal(tcpForwarder.prefixMessageWithService("Encrypt/decrypt error."), e);
+				shutdown();
+			} catch (IllegalBlockSizeException e) {
+				logger.fatal(tcpForwarder.prefixMessageWithService("Encrypt/decrypt error."), e);
+				shutdown();
+			} catch (IllegalStateException e) {
+				logger.fatal(tcpForwarder.prefixMessageWithService("Encrypt/decrypt error."), e);
+				shutdown();
+			} catch (ClassNotFoundException e) {
+				logger.fatal(tcpForwarder.prefixMessageWithService("Impossible to deserialize request."), e);
+				shutdown();
+			} catch (IOException e) {
+				logger.fatal(tcpForwarder.prefixMessageWithService("Problem with IO."), e);
+				shutdown();
+			}
+		}
+			
+		private void init() throws Exception {
+			Scheme http = new Scheme("http", serverPort, PlainSocketFactory.getSocketFactory());
+			SchemeRegistry sr = new SchemeRegistry();
+			sr.register(http);
+			ClientConnectionManager connMrg = new SingleClientConnManager(sr);
+			httpClient = new DefaultHttpClient(connMrg);
+			if (proxyEnabled) {
+				initProxyConfiguration();
+			}
+			httpContext = new BasicHttpContext();
+		}
+		
+		private void initProxyConfiguration() {
+			HttpHost proxy = new HttpHost(proxyUrl, proxyPort);
+			httpClient.getParams().setParameter(ConnRoutePNames.DEFAULT_PROXY, proxy);
+		}
+		
+		private BytesArray sendForwardRequest(BytesArray data) throws InvalidKeyException, BadPaddingException, IllegalBlockSizeException, IllegalStateException, IOException, ClassNotFoundException {
+			HttpPost httpPost = new HttpPost("http://" + serverUrl + ":" + serverPort);
+			Request req = new Request(Request.RequestType.FORWARD, new BytesArray(data.getData(), data.getSize()), serviceInfo, serviceInstanceId);
+			httpPost.setEntity(genEncryptedEntityFromObject(req));
+			logger.info(tcpForwarder.prefixMessageWithService("Forwarding " + req.getData().getSize() + " bytes to secure http server"));
+			HttpResponse response = httpClient.execute(httpPost, httpContext);
+			return getDataFromResponse(response);
+		}
+		
+		private BytesArray sendRequestWithoutData(Request.RequestType type) throws IOException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException, IllegalStateException, ClassNotFoundException {
+			HttpPost httpPost = new HttpPost("http://" + serverUrl + ":" + serverPort);
+			Request req = new Request(type, new BytesArray(null, 0), serviceInfo, serviceInstanceId);
+			httpPost.setEntity(genEncryptedEntityFromObject(req));
+			logger.info(tcpForwarder.prefixMessageWithService("Sending 'ASK_FOR_DATA' request of " + req.getData().getSize() + " bytes to secure http server"));
+			HttpResponse response = httpClient.execute(httpPost, httpContext);
+			return getDataFromResponse(response);
+		}
+		
+		private BytesArray getDataFromResponse(HttpResponse response) throws IOException, IllegalStateException, ClassNotFoundException {
+			HttpEntity entity = response.getEntity();
+			Response internalResponse = readResponseFromEntity(entity);
+			logger.info(tcpForwarder.prefixMessageWithService("Received " + internalResponse.getData().getSize() + " bytes from secure http server."));
+			return internalResponse.getData();
+		}
+		
+		private void shutdown() {
+			if (poller != null) {
 				poller.shutdown();
 				poller = null;
-			} catch (InvalidKeyException e) {
-				logger.fatal(prefixMessageWithService("Encrypt/decrypt error."), e);
-				closeCurrentConnection();
-			} catch (BadPaddingException e) {
-				logger.fatal(prefixMessageWithService("Encrypt/decrypt error."), e);
-				closeCurrentConnection();
-			} catch (IllegalBlockSizeException e) {
-				logger.fatal(prefixMessageWithService("Encrypt/decrypt error."), e);
-				closeCurrentConnection();
-			} catch (IllegalStateException e) {
-				logger.fatal(prefixMessageWithService("Encrypt/decrypt error."), e);
-				closeCurrentConnection();
-			} catch (ClassNotFoundException e) {
-				logger.fatal(prefixMessageWithService("Impossible to deserialize request."), e);
-				closeCurrentConnection();
-			} catch (FatalIOException e) {
-				logger.fatal(prefixMessageWithService("Fatal IO Exception. Shutdown all."), e);
-				tcpForwarder.shutdown();
+			}
+			tcpForwarder.shutdown();
+			logger.info(tcpForwarder.prefixMessageWithService("Unregister ClientConnectionHandler with id " + socketId));
+			SecureHttpClient.this.handlers.remove(socketId);
+			httpClient.getConnectionManager().shutdown();
+		}
+		
+		private class HttpDataPoller extends Thread {
+			
+			private AtomicInteger milliBeforeNextPolling;
+			
+			private boolean interrupted = false;
+			
+			private boolean running = true;
+			
+			private int maxSleepTime;
+			private int minSleepTime;
+			private int incrementSleepTime;
+			
+			public HttpDataPoller(int maxSleepTime, int minSleepTime, int incrementSleepTime) {
+				this.maxSleepTime = maxSleepTime;
+				this.minSleepTime = minSleepTime;
+				this.incrementSleepTime = incrementSleepTime;
+				milliBeforeNextPolling = new AtomicInteger(minSleepTime);
+			}
+			
+			public void interruptPolling() {
+				this.milliBeforeNextPolling.set(minSleepTime);
+				this.interrupted = true;
+				this.interrupt();
+			}
+			
+			private void processError(String errorText, Exception e) {
+				logger.fatal(prefixMessageWithService(errorText), e);
+				shutdown();
 				running = false;
-			} catch (IOException e) {
-				logger.fatal(prefixMessageWithService("Problem with IO."), e);
-				closeCurrentConnection();
 			}
-		}
-	}
-	
-	private void closeCurrentConnection() {
-		doNotReadData = true;
-		tcpForwarder.closeCurrentStreams();
-	}
-	
-	private BytesArray sendForwardRequest(BytesArray data) throws InvalidKeyException, BadPaddingException, IllegalBlockSizeException, IllegalStateException, IOException, ClassNotFoundException {
-		HttpPost httpPost = new HttpPost("http://" + serverUrl + ":" + serverPort);
-		Request req = new Request(Request.RequestType.FORWARD, new BytesArray(data.getData(), data.getSize()), serviceInfo.getUrl(), serviceInfo.getPort());
-		httpPost.setEntity(genEncryptedEntityFromObject(req));
-		logger.info(prefixMessageWithService("Forwarding " + req.getData().getSize() + " bytes to secure http server"));
-		HttpResponse response = httpClient.execute(httpPost, httpContext);
-		return getDataFromResponse(response);
-	}
-	
-	private BytesArray sendRequestWithoutData(Request.RequestType type) throws IOException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException, IllegalStateException, ClassNotFoundException {
-		HttpPost httpPost = new HttpPost("http://" + serverUrl + ":" + serverPort);
-		Request req = new Request(type, new BytesArray(null, 0), serviceInfo.getUrl(), serviceInfo.getPort());
-		httpPost.setEntity(genEncryptedEntityFromObject(req));
-		logger.info(prefixMessageWithService("Sending 'ASK_FOR_DATA' reques to secure http server"));
-		HttpResponse response = httpClient.execute(httpPost, httpContext);
-		return getDataFromResponse(response);
-	}
-	
-	private BytesArray getDataFromResponse(HttpResponse response) throws IOException, IllegalStateException, ClassNotFoundException {
-		HttpEntity entity = response.getEntity();
-		Response internalResponse = readResponseFromEntity(entity);
-		logger.info(prefixMessageWithService("Received " + internalResponse.getData().getSize() + " bytes from secure http server."));
-		return internalResponse.getData();
-	}
-	
-	private class HttpDataPoller extends Thread {
-		
-		private AtomicInteger milliBeforeNextPolling;
-		
-		private boolean interrupted = false;
-		
-		private boolean running = true;
-		
-		private int maxSleepTime;
-		private int minSleepTime;
-		private int incrementSleepTime;
-		
-		public HttpDataPoller(int maxSleepTime, int minSleepTime, int incrementSleepTime) {
-			this.maxSleepTime = maxSleepTime;
-			this.minSleepTime = minSleepTime;
-			this.incrementSleepTime = incrementSleepTime;
-			milliBeforeNextPolling = new AtomicInteger(minSleepTime);
-		}
-		
-		public void interruptPolling() {
-			this.milliBeforeNextPolling.set(minSleepTime);
-			this.interrupted = true;
-			this.interrupt();
-		}
-		
-		private void processError(String errorText, Exception e) {
-			logger.fatal(prefixMessageWithService(errorText), e);
-			closeCurrentConnection();
-			running = false;
-		}
-		
-		public void shutdown() {
-			running = false;
-			interruptPolling();
-		}
-		
-		@Override
-		public void run() {
-			super.run();
 			
-			logger.info(prefixMessageWithService("Start HttpDataPoller."));
+			public void shutdown() {
+				running = false;
+				interruptPolling();
+			}
 			
-			while (running) {
-				try {
-					synchronized (SecureHttpClient.this) {
-						interrupted = false;
-					}
-					logger.debug(prefixMessageWithService("Sleep for " + milliBeforeNextPolling.get() + " milliseconds."));
-					Thread.sleep(milliBeforeNextPolling.get());
-				} catch (InterruptedException e) {
-					logger.debug(prefixMessageWithService("Sleep interrupted."));
-				}
+			@Override
+			public void run() {
+				super.run();
 				
-				synchronized(SecureHttpClient.this) {
-					if (!interrupted) {
-						try {
-							logger.debug(prefixMessageWithService("Ask for data to remote service."));
-							BytesArray data = sendRequestWithoutData(Request.RequestType.ASK_FOR_DATA);
-							if (data.getSize() > 0) {
-								tcpForwarder.writeBytesArray(data);
-							} else {
-								if (milliBeforeNextPolling.get() < maxSleepTime) {
-									milliBeforeNextPolling.getAndAdd(incrementSleepTime);
+				logger.info(prefixMessageWithService("Start HttpDataPoller."));
+				
+				while (running) {
+					try {
+						synchronized (ClientConnectionHandler.this) {
+							interrupted = false;
+						}
+						logger.debug(tcpForwarder.prefixMessageWithService("Sleep for " + milliBeforeNextPolling.get() + " milliseconds."));
+						Thread.sleep(milliBeforeNextPolling.get());
+					} catch (InterruptedException e) {
+						logger.debug(tcpForwarder.prefixMessageWithService("Sleep interrupted."));
+					}
+					
+					synchronized(ClientConnectionHandler.this) {
+						if (!interrupted) {
+							try {
+								logger.debug(tcpForwarder.prefixMessageWithService("Ask for data to remote service."));
+								BytesArray data = sendRequestWithoutData(Request.RequestType.ASK_FOR_DATA);
+								if (data.getSize() > 0) {
+									tcpForwarder.writeBytesArray(data);
+									milliBeforeNextPolling.set(minSleepTime);
+								} else {
+									if (milliBeforeNextPolling.get() < maxSleepTime) {
+										milliBeforeNextPolling.getAndAdd(incrementSleepTime);
+									}
 								}
-							}
-						} catch (InvalidKeyException e) {
-							processError("Encrypt/decrypt error.", e);
-						} catch (BadPaddingException e) {
-							processError("Encrypt/decrypt error.", e);
-						} catch (IllegalBlockSizeException e) {
-							processError("Encrypt/decrypt error.", e);
-						} catch (IllegalStateException e) {
-							processError("Encrypt/decrypt error.", e);
-						} catch (ClassNotFoundException e) {
-							processError("Impossible to deserialize request.", e);
-						} catch (IOException e) {
-							processError("Problem with IO.", e);
-						}	
+							} catch (InvalidKeyException e) {
+								processError("Encrypt/decrypt error.", e);
+							} catch (BadPaddingException e) {
+								processError("Encrypt/decrypt error.", e);
+							} catch (IllegalBlockSizeException e) {
+								processError("Encrypt/decrypt error.", e);
+							} catch (IllegalStateException e) {
+								processError("Encrypt/decrypt error.", e);
+							} catch (ClassNotFoundException e) {
+								processError("Impossible to deserialize request.", e);
+							} catch (IOException e) {
+								processError("Problem with IO.", e);
+							}	
+						}
 					}
 				}
 			}
 		}
 	}
+	
 	
 	public void setServerPort(Integer serverPort) {
 		this.serverPort = serverPort;

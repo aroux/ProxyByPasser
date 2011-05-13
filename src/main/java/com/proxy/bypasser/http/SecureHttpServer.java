@@ -5,7 +5,11 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map.Entry;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
@@ -39,13 +43,22 @@ public class SecureHttpServer extends SecureHttpPeer {
 	
 	private HashMap<String, ServerConnectionHandler> handlers;
 	
+	private HashMap<String, TcpForwarder> tcpForwarders;
+	
+	private TcpForwarderGarbageCollector tfgc;
+	
+	private Long garbageTriggerTime;
+	
 	public SecureHttpServer(Integer httpServerPort) throws NoSuchAlgorithmException, NoSuchPaddingException, FileNotFoundException, IOException, ClassNotFoundException  {
 		super();
 		serverSocket = new ServerSocket(httpServerPort);
 		handlers = new HashMap<String, ServerConnectionHandler>();
+		tcpForwarders = new HashMap<String, TcpForwarder>();
 	}
 	
 	public void run() throws IOException, HttpException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
+		tfgc = new TcpForwarderGarbageCollector(garbageTriggerTime);
+		tfgc.start();
 		active = true;
 		while (active) {
 			logger.info("Listening for new connection.");
@@ -59,6 +72,10 @@ public class SecureHttpServer extends SecureHttpPeer {
 		serverSocket.close();
 	}
 	
+	public void setGarbageTriggerTime(Long garbageTriggerTime) {
+		this.garbageTriggerTime = garbageTriggerTime;
+	}
+	
 	public void shutdownServer() {
 		logger.info("Server is shutting down...");
 		active = false;
@@ -67,6 +84,7 @@ public class SecureHttpServer extends SecureHttpPeer {
 		for (ServerConnectionHandler handler : handlersCopy.values()) {
 			handler.shutdown();
 		}
+		tfgc.shutdown();
 		logger.info("Shutting down completed.");
 	}
 	
@@ -85,12 +103,6 @@ public class SecureHttpServer extends SecureHttpPeer {
 		private HttpProcessor httpProc;
 		private HttpContext context;
 		
-		protected TcpForwarder tcpForwarder;
-		
-		public void closeServiceStreams() {
-			tcpForwarder.closeCurrentStreams();
-		}
-		
 		public ServerConnectionHandler(Socket socket, String socketId) {
 			this.socket = socket;
 			this.socketId = socketId;
@@ -107,8 +119,6 @@ public class SecureHttpServer extends SecureHttpPeer {
 			    new HttpRequestHandlerRegistry();
 			handlerResolver.register("*", new SecureServerHttpRequestHandler());
 			
-			tcpForwarder = new TcpForwarder();
-			
 			httpService = new HttpService(
 			        httpProc, 
 			        new DefaultConnectionReuseStrategy(), 
@@ -116,9 +126,8 @@ public class SecureHttpServer extends SecureHttpPeer {
 			        handlerResolver,
 			        params);
 			
-			context.setAttribute("tcpForwarder", tcpForwarder);
 			context.setAttribute("secureHttpServer", SecureHttpServer.this);
-			context.setAttribute("serverConnectionHandler", this);
+			context.setAttribute("tcpForwarders", tcpForwarders);
 		}
 		
 		@Override
@@ -155,6 +164,54 @@ public class SecureHttpServer extends SecureHttpPeer {
 			} catch (IOException e) {
 				logger.error("Impossible to shutdown ServerConnection.", e);
 			}
+		}
+	}
+	
+	class TcpForwarderGarbageCollector extends Thread {
+		
+		private Long garbageTriggerTime;
+		
+		private Integer sleepTime = 1000;
+		
+		private boolean active;
+		
+		public TcpForwarderGarbageCollector(Long garbageTriggerTime) {
+			this.garbageTriggerTime = garbageTriggerTime;
+		}
+		
+		@Override
+		public void run() {
+			active = true;
+			while (active) {
+				
+				long currentTime = new Date().getTime();
+				synchronized (tcpForwarders) {
+					List<String> tcpForwardersToRemove = new ArrayList<String>();
+					for (Entry<String, TcpForwarder> entry : tcpForwarders.entrySet()) {
+						TcpForwarder tcpForwarder = entry.getValue();
+						long diffTime = currentTime - tcpForwarder.getLastUsedTime();
+						if (diffTime > garbageTriggerTime.longValue()) {
+							logger.info("TcpForwarder with service instance id '" + tcpForwarder.getServiceInstanceId() + "' marked for removal.");
+							tcpForwarder.shutdown();
+							tcpForwardersToRemove.add(tcpForwarder.getServiceInstanceId());
+						}
+					}
+					for (String serviceInstanceId : tcpForwardersToRemove) {
+						tcpForwarders.remove(serviceInstanceId);
+					}
+				}
+				
+				try {
+					Thread.sleep(sleepTime);
+				} catch (InterruptedException e) {
+					logger.info("Sleep interrupted. Will likely shutdown.");
+				}
+			}
+		}
+		
+		public void shutdown() {
+			this.active = false;
+			this.interrupt();
 		}
 	}
 }

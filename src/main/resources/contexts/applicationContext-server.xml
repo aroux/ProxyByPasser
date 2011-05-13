@@ -12,6 +12,7 @@
 
   <bean id="secure.http.server" class="com.proxy.bypasser.http.SecureHttpServer">
   	<property name="pm" ref="privacy.maker" />
+  	<property name="garbageTriggerTime" value="${tcp.forwarder.garbage.trigger.time}" />
   	<constructor-arg value="${secure.http.server.port}" />
   </bean>
   
@@ -21,5 +22,4 @@
   	<property name="keyFileName" value="${privacy.maker.key.filename}" />
   	<property name="dataPath" value="${privacy.maker.data.path}" />
   </bean>
-
 </beans>

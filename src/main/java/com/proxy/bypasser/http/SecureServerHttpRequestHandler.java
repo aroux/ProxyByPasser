@@ -1,5 +1,6 @@
 package com.proxy.bypasser.http;
 import java.io.IOException;
+import java.util.Map;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpEntityEnclosingRequest;
@@ -14,6 +15,7 @@ import org.apache.log4j.Logger;
 import com.proxy.bypasser.data.BytesArray;
 import com.proxy.bypasser.data.Request;
 import com.proxy.bypasser.data.Response;
+import com.proxy.bypasser.services.ServiceInfo;
 import com.proxy.bypasser.tcp.TcpForwarder;
 
 public class SecureServerHttpRequestHandler implements HttpRequestHandler {
@@ -21,10 +23,12 @@ public class SecureServerHttpRequestHandler implements HttpRequestHandler {
 	Logger logger = Logger.getLogger(SecureServerHttpRequestHandler.class);
 	
 	private void processServiceIOError(String errorText, IOException e, HttpResponse response, 
-			SecureHttpServer.ServerConnectionHandler serverConnectionHandler) {
+			TcpForwarder tcpForwarder) {
 		logger.fatal(errorText, e);
 		response.addHeader("Content-Length", "0");
-		serverConnectionHandler.closeServiceStreams();
+		if (tcpForwarder != null) {
+			tcpForwarder.shutdown();
+		}
 	}
 	
 	private void processError(String errorText, Exception e, HttpResponse response) {
@@ -37,17 +41,29 @@ public class SecureServerHttpRequestHandler implements HttpRequestHandler {
             HttpResponse response, 
             HttpContext context) throws HttpException {
     	
-		TcpForwarder tcpForwarder = (TcpForwarder) context.getAttribute("tcpForwarder");
+		@SuppressWarnings("unchecked")
+		Map<String, TcpForwarder> tcpForwarders = (Map<String, TcpForwarder>) context.getAttribute("tcpForwarders");
 		SecureHttpServer secureHttpServer = (SecureHttpServer) context.getAttribute("secureHttpServer");
-		SecureHttpServer.ServerConnectionHandler serverConnectionHandler = (SecureHttpServer.ServerConnectionHandler) context.getAttribute("serverConnectionHandler");
+		TcpForwarder tcpForwarder = null;
 		try {
 	    	HttpEntity entity = ((HttpEntityEnclosingRequest) request).getEntity();
 			
 			Request internalRequest = secureHttpServer.readRequestFromEntity(entity);
-			logger.info("Received " + internalRequest.getRequestType().name() + " request of " // 
+			
+			synchronized (tcpForwarders) {
+				tcpForwarder = tcpForwarders.get(internalRequest.getServiceInstanceId());
+				if (tcpForwarder == null) {
+					tcpForwarder = new TcpForwarder();
+					tcpForwarder.setPrefixService("[Service " + internalRequest.getServiceName() + "] - ");
+					tcpForwarder.setServiceInstanceId(internalRequest.getServiceInstanceId());
+					tcpForwarders.put(internalRequest.getServiceInstanceId(), tcpForwarder);
+				}
+			}
+			
+			logger.info(tcpForwarder.prefixMessageWithService("Received " + internalRequest.getRequestType().name() + " request of " // 
 					+ internalRequest.getData().getSize() + " bytes from " //
 					+ ((HttpRequest) request).getFirstHeader("host") + " for service " + internalRequest.getUrlService() //
-					+ ":" + internalRequest.getPortService());
+					+ ":" + internalRequest.getPortService()));
 			
 			Response internalResponse;
 			if (internalRequest.getRequestType().equals(Request.RequestType.REINIT_SERVICE_STREAM)) {
@@ -65,17 +81,13 @@ public class SecureServerHttpRequestHandler implements HttpRequestHandler {
 			ByteArrayEntity encryptedEntity = secureHttpServer.genEncryptedEntityFromObject(internalResponse);
 			response.setHeader("Content-length", String.valueOf(encryptedEntity.getContentLength()));
 			response.setEntity(encryptedEntity);
-	        logger.debug("Responding back to client " + encryptedEntity.getContentLength() + " bytes.");
+	        logger.debug(tcpForwarder.prefixMessageWithService("Responding back to client " + encryptedEntity.getContentLength() + " bytes."));
 		} catch (IllegalStateException e) {
 			processError("Encrypt/decrypt error.", e, response);
 		} catch (ClassNotFoundException e) {
 			processError("Impossible to deserialize request.", e, response);
 		} catch (IOException e) {
-			processServiceIOError("Service socket error.", e, response, serverConnectionHandler);
+			processServiceIOError("Service socket error.", e, response, tcpForwarder);
 		}
-		
-		
     }
-	
-	
 }

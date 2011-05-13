@@ -4,14 +4,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
-import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Date;
 
 import org.apache.log4j.Logger;
 
 import com.proxy.bypasser.data.BytesArray;
-import com.proxy.bypasser.http.SecureHttpClient;
-import com.proxy.bypasser.io.exc.FatalIOException;
 import com.proxy.bypasser.io.exc.SocketClosedException;
 import com.proxy.bypasser.utils.IOUtils;
 
@@ -19,39 +17,26 @@ public class TcpForwarder {
 	
 	Logger logger = Logger.getLogger(TcpForwarder.class);
 	
-	private Integer port;
-	
 	private Socket socket;
-	private ServerSocket serverSocket = null;
-	
-	private SecureHttpClient client;
-	
 	private InputStream is;
-	
 	private OutputStream os;
 	
+	private String prefixService;
+	private String serviceInstanceId;
+	
+	private long lastUsedTime;
+	
 	public TcpForwarder() {
-		this.port = null;
-		this.client = null;
+		this.prefixService = null;
 	}
 	
-	public TcpForwarder(Integer port, SecureHttpClient client) {
-		this.port = port;
-		this.client = client;
-	}
-	
-	public void waitForNextIncomingConnection() throws IOException {
-		try {
-			if (serverSocket == null) {
-				serverSocket = new ServerSocket(port);
-			}
-			socket = serverSocket.accept();
-		} catch (IOException e) {
-			throw new FatalIOException(e);
-		}
+	public TcpForwarder(Socket socket, String prefixService) throws IOException {
+		this.socket = socket;
 		is = socket.getInputStream();
 		os = socket.getOutputStream();
+		this.prefixService = prefixService;
 	}
+
 	
 	public void openNewStreams(String serviceUrl, Integer servicePort) throws IOException {
 		InetAddress serviceAddress = InetAddress.getByName(serviceUrl);
@@ -59,6 +44,7 @@ public class TcpForwarder {
 		is = socket.getInputStream();
 		os = socket.getOutputStream();
 		logger.info(prefixMessageWithService("New streams open to " + serviceUrl + ":" + servicePort));
+		lastUsedTime = new Date().getTime();
 	}
 	
 
@@ -70,6 +56,7 @@ public class TcpForwarder {
 	}
 	
 	public BytesArray readBytesArray(boolean doNotCheckAvailableFirstRead) throws IOException {
+		lastUsedTime = new Date().getTime();
 		try {
 			BytesArray data = IOUtils.readAvailableFromIS(is, doNotCheckAvailableFirstRead);
 			logger.info(prefixMessageWithService("Received " + data.getSize() + " bytes from service @" + socket.getRemoteSocketAddress()));
@@ -82,11 +69,7 @@ public class TcpForwarder {
 	}
 	
 	public void writeBytesArray(BytesArray data) throws IOException {
-		
-//		if (socket.isClosed()) {
-//			throw new SocketClosedException();
-//		}
-		
+		lastUsedTime = new Date().getTime();
 		os.write(data.getData(), 0, data.getSize());
 		os.flush();
 		logger.info(prefixMessageWithService("Sent " + data.getSize() + " bytes to service @" + socket.getRemoteSocketAddress()));
@@ -123,20 +106,33 @@ public class TcpForwarder {
 	
 	public void shutdown() {
 		closeCurrentStreams();
-		try {
-			if (serverSocket != null) {
-				serverSocket.close();
+	}
+	
+	public String prefixMessageWithService(Object message) {
+		if (prefixService == null) {
+			return message.toString();
+		} else {
+			if (serviceInstanceId == null) {
+				return prefixService + message.toString();
+			} else {
+				return prefixService + "[SI " + serviceInstanceId  + "] " + message.toString();
 			}
-		} catch (IOException e) {
-			logger.error("Impossible to close server socket.", e);
 		}
 	}
 	
-	private String prefixMessageWithService(Object message) {
-		if (client != null) {
-			return client.prefixMessageWithService(message);
-		} else {
-			return message.toString();
-		}
+	public void setServiceInstanceId(String serviceInstanceId) {
+		this.serviceInstanceId = serviceInstanceId;
+	}
+	
+	public void setPrefixService(String prefixService) {
+		this.prefixService = prefixService;
+	}
+	
+	public long getLastUsedTime() {
+		return lastUsedTime;
+	}
+	
+	public String getServiceInstanceId() {
+		return serviceInstanceId;
 	}
 }

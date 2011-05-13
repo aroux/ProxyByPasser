@@ -1,5 +1,8 @@
 package com.proxy.bypasser.data;
+
 import java.io.Serializable;
+
+import com.proxy.bypasser.services.ServiceInfo;
 
 
 public class Request implements Serializable {
@@ -10,16 +13,22 @@ public class Request implements Serializable {
 	
 	private final BytesArray data;
 	
+	private final String serviceName;
+	
 	private final String urlService;
 	
 	private final Integer portService;
 	
-	public Request(RequestType requestType, BytesArray data, String urlService, Integer portService) {
+	private final String serviceInstanceId;
+	
+	public Request(RequestType requestType, BytesArray data, ServiceInfo serviceInfo, String serviceInstanceId) {
 		super();
 		this.requestType = requestType;
 		this.data = data;
-		this.urlService = urlService;
-		this.portService = portService;
+		this.urlService = serviceInfo.getUrl();
+		this.portService = serviceInfo.getPort();
+		this.serviceName = serviceInfo.getServiceName();
+		this.serviceInstanceId = serviceInstanceId;
 	}
 
 	public BytesArray getData() {
@@ -28,6 +37,10 @@ public class Request implements Serializable {
 	
 	public RequestType getRequestType() {
 		return requestType;
+	}
+	
+	public String getServiceName() {
+		return serviceName;
 	}
 	
 	public Integer getPortService() {
@@ -50,5 +63,9 @@ public class Request implements Serializable {
 		public int getCode() {
 			return code;
 		}
+	}
+	
+	public String getServiceInstanceId() {
+		return serviceInstanceId;
 	}
 }
